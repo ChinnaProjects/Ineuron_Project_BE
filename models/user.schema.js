@@ -36,7 +36,7 @@ const userSchema = mongoose.Schema(
 );
 //challange -1 encrypt password
 userSchema.pre("save", async function (next) {
-  if (!this.modified("password")) return next();
+  if (!this.isModified("password")) return next();
   this.password = await bcrypt.hash(this.password, 10);
   next();
 });
@@ -56,6 +56,17 @@ userSchema.methods = {
         expiresIn: config.JWT_EXPIRY, //this value should come from .env file
       }
     );
+  },
+  generateForgotPasswordToken: function () {
+    const forgotToken = crypto.randomBytes(64).toString("hex");
+    //save in DB
+    this.forgotPasswordToken = crypto
+      .createHash("sha256")
+      .update(forgotToken)
+      .digest("hex");
+
+    this.forgotPasswordExpiry = Date.now() + 2 * 60 * 60 * 1000;
+    return forgotToken;
   },
 };
 export default mongoose.model("User", userSchema);
