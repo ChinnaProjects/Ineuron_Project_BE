@@ -1,6 +1,7 @@
 import User from "../models/user.schema.js";
 import asyncHandler from "../services/asyncHandler.js";
 import CustomError from "../utils/customError.js";
+import mailHelper from "../utils/mailhelper.js";
 
 export const cookieOptions = {
   expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
@@ -86,3 +87,51 @@ export const logOut = asyncHandler(async (_req, res) => {
     message: "User is Logged out SuccessFully",
   });
 });
+
+/***********************************************************************
+ * @FORGOT_PASSWORD
+ * @route https://localhost:4000/api/auth/password
+ * @description User will submit email and we will generate a token
+ * @parameter email
+ * @returns success message - email send
+ ************************************************************************/
+export const forgotPassword = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  //check emailfor null or ""
+  const user = User.findOne({ email });
+  if (!user) {
+    throw new CustomError("User is not found", 404);
+  }
+  const resetToken = user.generateForgotPasswordToken();
+  await user.save({ validateBeforeSave: false });
+  const resetURL = `${req.protocol}://${req.get(
+    "host"
+  )}/api/auth/password/reset${resetToken}`;
+
+  const text = `Your Password Reset URL is \n\n ${resetURL} \n\n`;
+  try {
+    await mailHelper({
+      email: user.email,
+      subject: "Password Reset Email for Web Site",
+      text: text,
+    });
+    res.status(200).json({
+      success: true,
+      message: `Email send to ${user.email}`,
+    });
+  } catch (error) {
+    user.forgotPasswordToken = undefined;
+    user.forgotPasswordExpiry = undefined;
+
+    user.save({ validateBeforeSave: false });
+    throw new CustomError(error.message || "Email Sent is failure", 500);
+  }
+});
+
+/***********************************************************************
+ * @RESET
+ * @route https://localhost:4000/api/auth/reset
+ * @description User will reset the password
+ * @parameter old password
+ * @returns success message - password is resetted successfully
+ ************************************************************************/
