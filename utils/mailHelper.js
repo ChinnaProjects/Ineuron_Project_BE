@@ -1,6 +1,6 @@
 import transporter from "../config/transporter.config.js";
 import config from "../config/index.js";
-const mailhelper = async (options) => {
+const mailHelper = async (options) => {
   const message = {
     from: config.SMPT_MAIL_EMAIL,
     to: options.email,
@@ -8,4 +8,6 @@ const mailhelper = async (options) => {
     text: options.text,
     // html: "<b>Hello world?</b>", // html body
   };
+  await transporter.sendMail(message);
 };
+export default mailHelper;
