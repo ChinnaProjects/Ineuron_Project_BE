@@ -2,6 +2,7 @@ import User from "../models/user.schema.js";
 import asyncHandler from "../services/asyncHandler.js";
 import CustomError from "../utils/customError.js";
 import mailHelper from "../utils/mailhelper.js";
+import crypto from "crypto";
 
 export const cookieOptions = {
   expires: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
@@ -50,7 +51,7 @@ export const signIn = asyncHandler(async (req, res) => {
   if (!email || !password) {
     throw new CustomError("Please pass all fields", 400);
   }
-  const user = User.findOne({ email }).select("+password");
+  const user = await User.findOne({ email }).select("+password");
   if (!user) {
     throw new CustomError("Invalid Credentails", 400);
   }
@@ -130,8 +131,46 @@ export const forgotPassword = asyncHandler(async (req, res) => {
 
 /***********************************************************************
  * @RESET
- * @route https://localhost:4000/api/auth/reset
- * @description User will reset the password
- * @parameter old password
- * @returns success message - password is resetted successfully
+ * @route https://localhost:4000/api/auth/reset/:resetPasswordToken
+ * @description User will reset the password based on the url
+ * @parameter token from url, password and confirm password
+ * @returns User Object
  ************************************************************************/
+
+export const resetPassword = asyncHandler(async (req, res) => {
+  const { token: resetToken } = req.params;
+  const { password, confirmPassword } = req.body;
+  const resetPasswordToken = crypto
+    .createHash("sha256")
+    .update(resetToken)
+    .digest("hex");
+
+  const user = await User.findOne({
+    forgotPasswordToken: resetPasswordToken,
+    forgotPasswordExpiry: { $gt: Date.now() },
+  });
+  if (!user) {
+    throw new CustomError("Password token is invalid or expired", 400);
+  }
+  if (password !== confirmPassword) {
+    throw new CustomError("Password and ConfirmPassword is not matched");
+  }
+  user.password = password;
+  user.forgotPasswordToken = undefined;
+  user.forgotPasswordExpiry = undefined;
+
+  await user.save();
+
+  //create token and send it to user
+
+  const token = user.getJwtToken();
+  user.password = undefined;
+  res.cookie("token", token, cookieOptions);
+  res.status(200).json({
+    success: true,
+    user,
+    token,
+  });
+});
+
+//Change Password
